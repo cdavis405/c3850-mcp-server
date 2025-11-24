@@ -13,6 +13,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("c3850-mcp-server")
 
 from contextlib import asynccontextmanager
+from functools import wraps
+
+def tool_error_handler(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except httpx.HTTPStatusError as e:
+            # Handle 401/403/404 specifically for the LLM
+            return f"⚠️ Network Error {e.response.status_code}: {e.response.text}"
+        except httpx.ConnectTimeout:
+            return "⚠️ Error: The Cisco 3850 is unreachable (Timeout)."
+        except Exception as e:
+            logger.error(f"Critical error in {func.__name__}: {e}")
+            return f"❌ Internal Tool Error: {str(e)}"
+    return wrapper
 
 # Global client storage
 http_client = None
@@ -36,6 +52,7 @@ async def server_lifespan(server: FastMCP):
 mcp = FastMCP("cisco-3850", dependencies=["httpx"], lifespan=server_lifespan)
 
 @mcp.tool()
+@tool_error_handler
 async def get_interfaces_status(status_filter: str = None) -> str:
     """Get the status of all interfaces (up/down, speed, duplex, vlan).
     
@@ -46,30 +63,35 @@ async def get_interfaces_status(status_filter: str = None) -> str:
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def get_vlan_brief() -> str:
     """Get a brief summary of all VLANs."""
     result = await device.get_vlan_brief()
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def get_system_summary() -> str:
     """Get system summary information (version, uptime, etc)."""
     result = await device.get_system_summary()
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def get_transceiver_stats() -> str:
     """Get detailed transceiver statistics."""
     result = await device.get_transceiver_stats()
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def get_device_health() -> str:
     """Get device health metrics (CPU, Memory, Environment)."""
     result = await device.get_device_health()
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def get_recent_logs(count: int = 50) -> str:
     """Get the most recent log messages.
     
@@ -80,12 +102,14 @@ async def get_recent_logs(count: int = 50) -> str:
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def check_interface_errors() -> str:
     """Check for interface errors (CRC, etc)."""
     result = await device.check_interface_errors()
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def set_interface_state(interface: str, state: str) -> str:
     """Set an interface state to 'up' or 'down'.
     
@@ -97,6 +121,7 @@ async def set_interface_state(interface: str, state: str) -> str:
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def set_interface_vlan(interface: str, vlan_id: int) -> str:
     """Assign an interface to a specific VLAN (access mode).
     
@@ -108,6 +133,7 @@ async def set_interface_vlan(interface: str, vlan_id: int) -> str:
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def set_vlan_name(vlan_id: int, name: str) -> str:
     """Set the name of a VLAN.
     
@@ -119,6 +145,7 @@ async def set_vlan_name(vlan_id: int, name: str) -> str:
     return str(result)
 
 @mcp.tool()
+@tool_error_handler
 async def bounce_interface(interface: str) -> str:
     """Bounce (shutdown then no shutdown) an interface.
     
