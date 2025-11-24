@@ -1,7 +1,12 @@
 import os
 import asyncio
 import httpx
+import os
+import asyncio
+import httpx
 import jmespath
+import time
+from functools import wraps
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
@@ -10,6 +15,29 @@ class DeviceConfig(BaseModel):
     username: str
     password: str
     port: int = 443
+
+def ttl_cache(ttl: int = 60):
+    """Simple TTL cache decorator for async methods."""
+    def decorator(func):
+        cache = {}
+        
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            # Create a key based on arguments
+            key = (func.__name__, args, frozenset(kwargs.items()))
+            now = time.time()
+            
+            if key in cache:
+                result, timestamp = cache[key]
+                if now - timestamp < ttl:
+                    return result
+            
+            result = await func(self, *args, **kwargs)
+            cache[key] = (result, now)
+            return result
+            
+        return wrapper
+    return decorator
 
 class C3850Device:
     def __init__(self, config: Optional[DeviceConfig] = None, http_client: Optional[httpx.AsyncClient] = None):
@@ -131,6 +159,7 @@ class C3850Device:
             "uptime": "Unknown" # Uptime usually in a different model, keeping simple for now
         }
     
+    @ttl_cache(ttl=60)
     async def get_transceiver_stats(self) -> Dict[str, Any]:
         """Get transceiver statistics."""
         # Note: Specific YANG model for transceiver stats might vary, using a generic interface query for now
