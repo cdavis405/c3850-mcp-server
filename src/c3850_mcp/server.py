@@ -53,7 +53,7 @@ mcp = FastMCP("cisco-3850", dependencies=["httpx"], lifespan=server_lifespan)
 
 @mcp.tool()
 @tool_error_handler
-async def get_interfaces_status(status_filter: str = None) -> str:
+async def get_interfaces_status(status_filter: Optional[str] = None) -> str:
     """Get the status of all interfaces (up/down, speed, duplex, vlan).
     
     Args:
