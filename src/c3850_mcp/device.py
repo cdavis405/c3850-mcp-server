@@ -1,6 +1,7 @@
 import os
 import asyncio
 import httpx
+import jmespath
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
@@ -65,12 +66,14 @@ class C3850Device:
         """Get status of all interfaces."""
         # ietf-interfaces:interfaces-state
         data = await self._request("GET", "/ietf-interfaces:interfaces-state")
-        interfaces = data.get("ietf-interfaces:interfaces-state", {}).get("interface", [])
+        
+        # Use JMESPath to extract interfaces
+        interfaces = jmespath.search('"ietf-interfaces:interfaces-state".interface[]', data) or []
         
         # Fetch config to get descriptions
         try:
             config_data = await self._request("GET", "/ietf-interfaces:interfaces")
-            config_interfaces = config_data.get("ietf-interfaces:interfaces", {}).get("interface", [])
+            config_interfaces = jmespath.search('"ietf-interfaces:interfaces".interface[]', config_data) or []
             config_map = {i.get("name"): i for i in config_interfaces}
         except Exception:
             # Fallback if config fetch fails
@@ -105,7 +108,7 @@ class C3850Device:
         """Get VLAN information."""
         # Cisco-IOS-XE-vlan-oper:vlan-oper-data
         data = await self._request("GET", "/Cisco-IOS-XE-vlan-oper:vlan-oper-data")
-        vlans = data.get("Cisco-IOS-XE-vlan-oper:vlan-oper-data", {}).get("vlan-instance", [])
+        vlans = jmespath.search('"Cisco-IOS-XE-vlan-oper:vlan-oper-data"."vlan-instance"[]', data) or []
         
         simplified_vlans = []
         for vlan in vlans:
@@ -113,7 +116,7 @@ class C3850Device:
                 "id": vlan.get("id"),
                 "name": vlan.get("name"),
                 "status": vlan.get("status", "active"), # Default to active if not present
-                "ports": [p.get("interface") for p in vlan.get("ports", [])]
+                "ports": jmespath.search("ports[].interface", vlan) or []
             })
         return simplified_vlans
 
@@ -121,9 +124,9 @@ class C3850Device:
         """Get system summary."""
         # Cisco-IOS-XE-native:native/version
         data = await self._request("GET", "/Cisco-IOS-XE-native:native/version")
-        version_data = data.get("Cisco-IOS-XE-native:version", {})
+        version = jmespath.search('"Cisco-IOS-XE-native:version".version', data)
         return {
-            "version": version_data.get("version"),
+            "version": version,
             "platform": "Cisco 3850", # Hardcoded as we know the device type or could extract
             "uptime": "Unknown" # Uptime usually in a different model, keeping simple for now
         }
@@ -138,15 +141,12 @@ class C3850Device:
         """Get device health (CPU, Memory, Environment)."""
         cpu_data = await self._request("GET", "/Cisco-IOS-XE-process-cpu-oper:cpu-usage")
         mem_data = await self._request("GET", "/Cisco-IOS-XE-process-memory-oper:memory-usage-processes")
-        env_data = await self._request("GET", "/Cisco-IOS-XE-environment-oper:environment-sensors")
         
-        cpu_usage = cpu_data.get("Cisco-IOS-XE-process-cpu-oper:cpu-usage", {}).get("cpu-utilization", {}).get("five-seconds")
+        cpu_usage = jmespath.search('"Cisco-IOS-XE-process-cpu-oper:cpu-usage"."cpu-utilization"."five-seconds"', cpu_data)
         
-        # Simplified memory calculation (just taking the first pool or total if available)
-        # This is a simplification as memory structures can be complex
+        # Simplified memory calculation
         memory_usage = "Unknown" 
-        if "Cisco-IOS-XE-process-memory-oper:memory-usage-processes" in mem_data:
-             # Just a placeholder logic as real parsing depends on exact structure
+        if jmespath.search('"Cisco-IOS-XE-process-memory-oper:memory-usage-processes"', mem_data):
              memory_usage = "Check details"
 
         return {
