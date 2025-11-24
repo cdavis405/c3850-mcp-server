@@ -49,10 +49,23 @@ class C3850Device:
         data = await self._request("GET", "/ietf-interfaces:interfaces-state")
         interfaces = data.get("ietf-interfaces:interfaces-state", {}).get("interface", [])
         
+        # Fetch config to get descriptions
+        try:
+            config_data = await self._request("GET", "/ietf-interfaces:interfaces")
+            config_interfaces = config_data.get("ietf-interfaces:interfaces", {}).get("interface", [])
+            config_map = {i.get("name"): i for i in config_interfaces}
+        except Exception:
+            # Fallback if config fetch fails
+            config_map = {}
+
         simplified_interfaces = []
         for iface in interfaces:
+            name = iface.get("name")
+            config = config_map.get(name, {})
             simplified_interfaces.append({
-                "name": iface.get("name"),
+                "name": name,
+                "description": config.get("description", ""),
+                "debug": "test_reload",
                 "admin_status": iface.get("admin-status"),
                 "oper_status": iface.get("oper-status"),
                 "speed": iface.get("speed"),
@@ -128,6 +141,7 @@ class C3850Device:
 
     async def set_interface_state(self, interface: str, state: str) -> Dict[str, Any]:
         """Set interface state (up/down)."""
+        from urllib.parse import quote
         enabled = state.lower() == "up"
         payload = {
             "ietf-interfaces:interface": {
@@ -136,7 +150,8 @@ class C3850Device:
             }
         }
         # Using PATCH to merge config
-        return await self._request("PATCH", f"/ietf-interfaces:interfaces/interface={interface}", json=payload)
+        encoded_interface = quote(interface, safe='')
+        return await self._request("PATCH", f"/ietf-interfaces:interfaces/interface={encoded_interface}", json=payload)
 
     async def set_interface_vlan(self, interface: str, vlan_id: int) -> Dict[str, Any]:
         """Set access VLAN for an interface."""
