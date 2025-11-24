@@ -6,17 +6,22 @@ from c3850_mcp.server import call_tool
 class TestC3850MCPServer(unittest.IsolatedAsyncioTestCase):
     async def test_get_interfaces_status(self):
         with patch("c3850_mcp.server.device") as mock_device:
-            # Mock async method
-            mock_device.get_interfaces_status = AsyncMock(return_value={"ietf-interfaces:interfaces-state": {}})
+            # Mock async method returning raw structure
+            mock_device.get_interfaces_status = AsyncMock(return_value=[
+                {"name": "GigabitEthernet1/0/1", "admin_status": "up", "oper_status": "up", "speed": 1000000000, "mac": "00:11:22:33:44:55"}
+            ])
             result = await call_tool("get_interfaces_status", {})
-            self.assertIn("ietf-interfaces", result[0].text)
+            self.assertIn("GigabitEthernet1/0/1", result[0].text)
+            self.assertIn("00:11:22:33:44:55", result[0].text)
             mock_device.get_interfaces_status.assert_called_once()
 
     async def test_get_vlan_brief(self):
         with patch("c3850_mcp.server.device") as mock_device:
-            mock_device.get_vlan_brief = AsyncMock(return_value={"vlan-oper-data": {}})
+            mock_device.get_vlan_brief = AsyncMock(return_value=[
+                {"id": 10, "name": "User_VLAN", "status": "active", "ports": ["Gi1/0/1"]}
+            ])
             result = await call_tool("get_vlan_brief", {})
-            self.assertIn("vlan-oper-data", result[0].text)
+            self.assertIn("User_VLAN", result[0].text)
             mock_device.get_vlan_brief.assert_called_once()
 
     async def test_set_interface_state(self):
