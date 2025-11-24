@@ -23,7 +23,12 @@ async def list_tools() -> List[Tool]:
             description="Get the status of all interfaces (up/down, speed, duplex, vlan).",
             inputSchema={
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "status_filter": {
+                        "type": "string",
+                        "description": "Optional. 'up', 'down', or specific interface name."
+                    }
+                },
             },
         ),
         Tool(
@@ -155,7 +160,8 @@ async def list_tools() -> List[Tool]:
 async def call_tool(name: str, arguments: Any) -> List[TextContent | ImageContent | EmbeddedResource]:
     try:
         if name == "get_interfaces_status":
-            result = await device.get_interfaces_status()
+            status_filter = arguments.get("status_filter")
+            result = await device.get_interfaces_status(status_filter)
             return [TextContent(type="text", text=str(result))]
         
         elif name == "get_vlan_brief":

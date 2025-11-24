@@ -43,7 +43,7 @@ class C3850Device:
                 return {}
             return response.json()
 
-    async def get_interfaces_status(self) -> List[Dict[str, Any]]:
+    async def get_interfaces_status(self, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get status of all interfaces."""
         # ietf-interfaces:interfaces-state
         data = await self._request("GET", "/ietf-interfaces:interfaces-state")
@@ -61,13 +61,23 @@ class C3850Device:
         simplified_interfaces = []
         for iface in interfaces:
             name = iface.get("name")
+            oper_status = iface.get("oper-status")
+            
+            # Apply filter if present
+            if status_filter:
+                if status_filter.lower() in ["up", "down"]:
+                    if oper_status != status_filter.lower():
+                        continue
+                elif status_filter not in name:
+                    continue
+
             config = config_map.get(name, {})
             simplified_interfaces.append({
                 "name": name,
                 "description": config.get("description", ""),
                 "debug": "test_reload",
                 "admin_status": iface.get("admin-status"),
-                "oper_status": iface.get("oper-status"),
+                "oper_status": oper_status,
                 "speed": iface.get("speed"),
                 "mac": iface.get("phys-address")
             })
