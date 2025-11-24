@@ -10,7 +10,8 @@ class DeviceConfig(BaseModel):
     port: int = 443
 
 class C3850Device:
-    def __init__(self, config: Optional[DeviceConfig] = None):
+    def __init__(self, config: Optional[DeviceConfig] = None, http_client: Optional[httpx.AsyncClient] = None):
+        self.http_client = http_client
         if config:
             self.config = config
         else:
@@ -29,6 +30,20 @@ class C3850Device:
 
     async def _request(self, method: str, path: str, json: Optional[Dict] = None) -> Dict[str, Any]:
         """Make an HTTP request to the device."""
+        if self.http_client:
+            response = await self.http_client.request(
+                method,
+                f"{self.base_url}{path}",
+                auth=self.auth,
+                headers=self.headers,
+                json=json,
+                timeout=10.0
+            )
+            response.raise_for_status()
+            if response.status_code == 204:
+                return {}
+            return response.json()
+        
         async with httpx.AsyncClient(verify=False) as client:
             response = await client.request(
                 method,
