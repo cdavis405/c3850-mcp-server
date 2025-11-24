@@ -1,4 +1,5 @@
 import os
+import asyncio
 import httpx
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ class DeviceConfig(BaseModel):
 class C3850Device:
     def __init__(self, config: Optional[DeviceConfig] = None, http_client: Optional[httpx.AsyncClient] = None):
         self.http_client = http_client
+        self.semaphore = asyncio.Semaphore(2)
         if config:
             self.config = config
         else:
@@ -30,33 +32,34 @@ class C3850Device:
 
     async def _request(self, method: str, path: str, json: Optional[Dict] = None) -> Dict[str, Any]:
         """Make an HTTP request to the device."""
-        if self.http_client:
-            response = await self.http_client.request(
-                method,
-                f"{self.base_url}{path}",
-                auth=self.auth,
-                headers=self.headers,
-                json=json,
-                timeout=10.0
-            )
-            response.raise_for_status()
-            if response.status_code == 204:
-                return {}
-            return response.json()
-        
-        async with httpx.AsyncClient(verify=False) as client:
-            response = await client.request(
-                method,
-                f"{self.base_url}{path}",
-                auth=self.auth,
-                headers=self.headers,
-                json=json,
-                timeout=10.0
-            )
-            response.raise_for_status()
-            if response.status_code == 204:
-                return {}
-            return response.json()
+        async with self.semaphore:
+            if self.http_client:
+                response = await self.http_client.request(
+                    method,
+                    f"{self.base_url}{path}",
+                    auth=self.auth,
+                    headers=self.headers,
+                    json=json,
+                    timeout=10.0
+                )
+                response.raise_for_status()
+                if response.status_code == 204:
+                    return {}
+                return response.json()
+            
+            async with httpx.AsyncClient(verify=False) as client:
+                response = await client.request(
+                    method,
+                    f"{self.base_url}{path}",
+                    auth=self.auth,
+                    headers=self.headers,
+                    json=json,
+                    timeout=10.0
+                )
+                response.raise_for_status()
+                if response.status_code == 204:
+                    return {}
+                return response.json()
 
     async def get_interfaces_status(self, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get status of all interfaces."""
