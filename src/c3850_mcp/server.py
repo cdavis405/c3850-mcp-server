@@ -155,56 +155,56 @@ async def list_tools() -> List[Tool]:
 async def call_tool(name: str, arguments: Any) -> List[TextContent | ImageContent | EmbeddedResource]:
     try:
         if name == "get_interfaces_status":
-            result = device.get_interfaces_status()
+            result = await device.get_interfaces_status()
             return [TextContent(type="text", text=str(result))]
         
         elif name == "get_vlan_brief":
-            result = device.get_vlan_brief()
-            return [TextContent(type="text", text=result)]
+            result = await device.get_vlan_brief()
+            return [TextContent(type="text", text=str(result))]
         
         elif name == "get_system_summary":
-            result = device.get_system_summary()
-            return [TextContent(type="text", text=result)]
+            result = await device.get_system_summary()
+            return [TextContent(type="text", text=str(result))]
         
         elif name == "get_transceiver_stats":
-            result = device.get_transceiver_stats()
-            return [TextContent(type="text", text=result)]
+            result = await device.get_transceiver_stats()
+            return [TextContent(type="text", text=str(result))]
         
         elif name == "get_device_health":
-            result = device.get_device_health()
+            result = await device.get_device_health()
             return [TextContent(type="text", text=str(result))]
         
         elif name == "get_recent_logs":
-            count = arguments.get("count", 50)
-            result = device.get_recent_logs(count)
-            return [TextContent(type="text", text=result)]
+            # count = arguments.get("count", 50) # RESTCONF log retrieval might not support count directly in the same way
+            result = await device.get_recent_logs()
+            return [TextContent(type="text", text=str(result))]
         
         elif name == "check_interface_errors":
-            result = device.check_interface_errors()
-            return [TextContent(type="text", text=result)]
+            result = await device.check_interface_errors()
+            return [TextContent(type="text", text=str(result))]
         
         elif name == "set_interface_state":
             interface = arguments["interface"]
             state = arguments["state"]
-            result = device.set_interface_state(interface, state)
-            return [TextContent(type="text", text=result)]
+            result = await device.set_interface_state(interface, state)
+            return [TextContent(type="text", text=str(result))]
         
         elif name == "set_interface_vlan":
             interface = arguments["interface"]
             vlan_id = arguments["vlan_id"]
-            result = device.set_interface_vlan(interface, vlan_id)
-            return [TextContent(type="text", text=result)]
+            result = await device.set_interface_vlan(interface, vlan_id)
+            return [TextContent(type="text", text=str(result))]
         
         elif name == "set_vlan_name":
             vlan_id = arguments["vlan_id"]
             name = arguments["name"]
-            result = device.set_vlan_name(vlan_id, name)
-            return [TextContent(type="text", text=result)]
+            result = await device.set_vlan_name(vlan_id, name)
+            return [TextContent(type="text", text=str(result))]
         
         elif name == "bounce_interface":
             interface = arguments["interface"]
-            result = device.bounce_interface(interface)
-            return [TextContent(type="text", text=result)]
+            result = await device.bounce_interface(interface)
+            return [TextContent(type="text", text=str(result))]
         
         else:
             raise ValueError(f"Unknown tool: {name}")

@@ -1,120 +1,154 @@
 import os
+import httpx
 from typing import Any, Dict, List, Optional
-from netmiko import ConnectHandler
 from pydantic import BaseModel
 
 class DeviceConfig(BaseModel):
     host: str
     username: str
     password: str
-    secret: str
-    device_type: str = "cisco_ios"
+    port: int = 443
 
 class C3850Device:
     def __init__(self, config: Optional[DeviceConfig] = None):
         if config:
             self.config = config
         else:
-            # Load from environment variables if not provided
             self.config = DeviceConfig(
                 host=os.getenv("C3850_HOST", ""),
                 username=os.getenv("C3850_USERNAME", ""),
                 password=os.getenv("C3850_PASSWORD", ""),
-                secret=os.getenv("C3850_SECRET", ""),
+                port=int(os.getenv("C3850_PORT", "443")),
             )
-        self.connection = None
+        self.base_url = f"https://{self.config.host}:{self.config.port}/restconf/data"
+        self.headers = {
+            "Accept": "application/yang-data+json",
+            "Content-Type": "application/yang-data+json",
+        }
+        self.auth = (self.config.username, self.config.password)
 
-    def connect(self):
-        """Establish connection to the device."""
-        if not self.connection:
-            self.connection = ConnectHandler(
-                device_type=self.config.device_type,
-                host=self.config.host,
-                username=self.config.username,
-                password=self.config.password,
-                secret=self.config.secret,
+    async def _request(self, method: str, path: str, json: Optional[Dict] = None) -> Dict[str, Any]:
+        """Make an HTTP request to the device."""
+        async with httpx.AsyncClient(verify=False) as client:
+            response = await client.request(
+                method,
+                f"{self.base_url}{path}",
+                auth=self.auth,
+                headers=self.headers,
+                json=json,
+                timeout=10.0
             )
-            self.connection.enable()
+            response.raise_for_status()
+            if response.status_code == 204:
+                return {}
+            return response.json()
 
-    def disconnect(self):
-        """Disconnect from the device."""
-        if self.connection:
-            self.connection.disconnect()
-            self.connection = None
-
-    def send_command(self, command: str, use_textfsm: bool = False) -> str | List[Dict[str, Any]]:
-        """Send a command to the device and return output."""
-        self.connect()
-        return self.connection.send_command(command, use_textfsm=use_textfsm)
-
-    def send_config_set(self, commands: List[str]) -> str:
-        """Send a set of configuration commands."""
-        self.connect()
-        return self.connection.send_config_set(commands)
-
-    def get_interfaces_status(self) -> List[Dict[str, Any]]:
+    async def get_interfaces_status(self) -> Dict[str, Any]:
         """Get status of all interfaces."""
-        # Use textfsm to parse 'show interfaces status'
-        return self.send_command("show interfaces status", use_textfsm=True)
+        # ietf-interfaces:interfaces-state
+        return await self._request("GET", "/ietf-interfaces:interfaces-state")
 
-    def get_vlan_brief(self) -> str:
+    async def get_vlan_brief(self) -> Dict[str, Any]:
         """Get VLAN information."""
-        return self.send_command("show vlan brief")
+        # Cisco-IOS-XE-vlan-oper:vlan-oper-data
+        return await self._request("GET", "/Cisco-IOS-XE-vlan-oper:vlan-oper-data")
 
-    def get_system_summary(self) -> str:
-        """Get system summary (version, etc)."""
-        return self.send_command("show version")
+    async def get_system_summary(self) -> Dict[str, Any]:
+        """Get system summary."""
+        # Cisco-IOS-XE-native:native/version
+        return await self._request("GET", "/Cisco-IOS-XE-native:native/version")
     
-    def get_transceiver_stats(self) -> str:
+    async def get_transceiver_stats(self) -> Dict[str, Any]:
         """Get transceiver statistics."""
-        return self.send_command("show interfaces transceiver detail")
+        # Note: Specific YANG model for transceiver stats might vary, using a generic interface query for now
+        # or assuming a specific model if known. For now, we'll try to get interface details which often contain this.
+        return await self._request("GET", "/Cisco-IOS-XE-interfaces-oper:interfaces/interface")
 
-    def get_device_health(self) -> Dict[str, str]:
+    async def get_device_health(self) -> Dict[str, Any]:
         """Get device health (CPU, Memory, Environment)."""
-        cpu = self.send_command("show processes cpu sorted | include CPU")
-        mem = self.send_command("show processes memory sorted | include Processor")
-        env = self.send_command("show environment all")
+        cpu = await self._request("GET", "/Cisco-IOS-XE-process-cpu-oper:cpu-usage")
+        mem = await self._request("GET", "/Cisco-IOS-XE-process-memory-oper:memory-usage-processes")
+        env = await self._request("GET", "/Cisco-IOS-XE-environment-oper:environment-sensors")
         return {
             "cpu": cpu,
             "memory": mem,
             "environment": env
         }
 
-    def get_recent_logs(self, count: int = 50) -> str:
+    async def get_recent_logs(self) -> Dict[str, Any]:
         """Get recent log messages."""
-        return self.send_command(f"show logging | last {count}")
+        # Cisco-IOS-XE-checkpoint-archive-oper:checkpoint-archives
+        # Note: Syslog via RESTCONF is not always straightforward. 
+        # We might need to rely on a specific operational model if available.
+        # Fallback to native logging config if operational data isn't exposed.
+        return await self._request("GET", "/Cisco-IOS-XE-native:native/logging")
 
-    def check_interface_errors(self) -> str:
+    async def check_interface_errors(self) -> Dict[str, Any]:
         """Check for interface errors."""
-        return self.send_command("show interfaces | include (Interface|CRC|error)")
+        return await self._request("GET", "/ietf-interfaces:interfaces-state")
 
-    def set_interface_state(self, interface: str, state: str) -> str:
+    async def set_interface_state(self, interface: str, state: str) -> Dict[str, Any]:
         """Set interface state (up/down)."""
-        cmd = "no shutdown" if state.lower() == "up" else "shutdown"
-        return self.send_config_set([f"interface {interface}", cmd])
+        enabled = state.lower() == "up"
+        payload = {
+            "ietf-interfaces:interface": {
+                "name": interface,
+                "enabled": enabled
+            }
+        }
+        # Using PATCH to merge config
+        return await self._request("PATCH", f"/ietf-interfaces:interfaces/interface={interface}", json=payload)
 
-    def set_interface_vlan(self, interface: str, vlan_id: int) -> str:
+    async def set_interface_vlan(self, interface: str, vlan_id: int) -> Dict[str, Any]:
         """Set access VLAN for an interface."""
-        commands = [
-            f"interface {interface}",
-            "switchport mode access",
-            f"switchport access vlan {vlan_id}"
-        ]
-        return self.send_config_set(commands)
+        # Cisco-IOS-XE-native:native/interface/GigabitEthernet={name}
+        # Note: Interface type needs to be handled dynamically in a real scenario.
+        # Assuming GigabitEthernet for simplicity or parsing the name.
+        if "GigabitEthernet" in interface:
+            if_type = "GigabitEthernet"
+            if_name = interface.replace("GigabitEthernet", "")
+        elif "TenGigabitEthernet" in interface:
+            if_type = "TenGigabitEthernet"
+            if_name = interface.replace("TenGigabitEthernet", "")
+        else:
+            raise ValueError("Unsupported interface type")
 
-    def set_vlan_name(self, vlan_id: int, name: str) -> str:
+        payload = {
+            f"Cisco-IOS-XE-native:{if_type}": {
+                "name": if_name,
+                "switchport": {
+                    "access": {
+                        "vlan": {
+                            "vlan": vlan_id
+                        }
+                    },
+                    "mode": {
+                        "access": {}
+                    }
+                }
+            }
+        }
+        return await self._request("PATCH", f"/Cisco-IOS-XE-native:native/interface/{if_type}={if_name}", json=payload)
+
+    async def set_vlan_name(self, vlan_id: int, name: str) -> Dict[str, Any]:
         """Set name for a VLAN."""
-        commands = [
-            f"vlan {vlan_id}",
-            f"name {name}"
-        ]
-        return self.send_config_set(commands)
+        payload = {
+            "Cisco-IOS-XE-vlan-oper:vlan-instance": {
+                "id": vlan_id,
+                "name": name
+            }
+        }
+        # Note: vlan-oper is usually read-only. Configuration should go to native vlan.
+        payload_config = {
+            "Cisco-IOS-XE-native:vlan": {
+                "id": vlan_id,
+                "name": name
+            }
+        }
+        return await self._request("PATCH", f"/Cisco-IOS-XE-native:native/vlan/vlan-list={vlan_id}", json=payload_config)
 
-    def bounce_interface(self, interface: str) -> str:
+    async def bounce_interface(self, interface: str) -> Dict[str, Any]:
         """Bounce (shut/no shut) an interface."""
-        commands = [
-            f"interface {interface}",
-            "shutdown",
-            "no shutdown"
-        ]
-        return self.send_config_set(commands)
+        # RESTCONF doesn't have a "bounce" primitive, so we do two requests.
+        await self.set_interface_state(interface, "down")
+        return await self.set_interface_state(interface, "up")

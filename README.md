@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server designed specifically for managing and mon
 
 ## Overview
 
-This project implements an MCP server that connects to a Cisco 3850 switch via SSH using `netmiko`. It exposes a set of tools that allow an AI assistant to retrieve device status, check health metrics, and perform basic configuration tasks. The tools are optimized to use minimal tokens and context, ensuring efficient communication.
+This project implements an MCP server that connects to a Cisco 3850 switch via **RESTCONF** using `httpx`. It exposes a set of tools that allow an AI assistant to retrieve device status, check health metrics, and perform basic configuration tasks. The tools are optimized to use minimal tokens and context by leveraging structured data from YANG models.
 
 ## Features
 
@@ -33,8 +33,13 @@ Perform essential configuration changes safely.
 ## Prerequisites
 
 - Python 3.10 or higher
-- Network access to the Cisco 3850 switch (SSH enabled)
-- Valid credentials (username, password, enable secret)
+- Network access to the Cisco 3850 switch (HTTPS/RESTCONF enabled)
+- Valid credentials (username, password)
+- **RESTCONF enabled on the device**:
+  ```cisco
+  ip http secure-server
+  restconf
+  ```
 
 ## Installation
 
@@ -56,12 +61,12 @@ Perform essential configuration changes safely.
 
 The server requires the following environment variables to connect to the switch:
 
-| Variable | Description |
-|----------|-------------|
-| `C3850_HOST` | IP address or hostname of the switch |
-| `C3850_USERNAME` | SSH Username |
-| `C3850_PASSWORD` | SSH Password |
-| `C3850_SECRET` | Enable Secret (if configured) |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `C3850_HOST` | IP address or hostname of the switch | |
+| `C3850_USERNAME` | Username | |
+| `C3850_PASSWORD` | Password | |
+| `C3850_PORT` | RESTCONF Port | 443 |
 
 ## Usage
 
@@ -71,7 +76,6 @@ Run the MCP server using the following command:
 export C3850_HOST="192.168.1.10"
 export C3850_USERNAME="admin"
 export C3850_PASSWORD="MySecurePassword"
-export C3850_SECRET="MySecret"
 
 python3 src/c3850_mcp/server.py
 ```
