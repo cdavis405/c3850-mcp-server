@@ -79,7 +79,9 @@ async def get_system_summary() -> str:
 @mcp.tool()
 @tool_error_handler
 async def get_transceiver_stats() -> str:
-    """Get detailed transceiver statistics."""
+    """Get optical levels (dBm) for fiber interfaces. 
+    USE THIS IF: User suspects physical layer issues, bad cables, or low light levels.
+    """
     result = await device.get_transceiver_stats()
     return str(result)
 
