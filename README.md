@@ -16,6 +16,7 @@ This MCP server transforms your Cisco 3850 switch into an AI-accessible network 
 
 **Key Technical Achievements:**
 - **Zero-dependency RESTCONF client** using Python's async `httpx` library
+- **Connection Pooling & Concurrency Control**: Implemented connection pooling and semaphore-based concurrency limiting to protect the legacy IOS XE control plane from exhaustion during high-frequency AI agent interaction.
 - **Token-optimized responses** that minimize LLM context pollution through client-side filtering
 - **Structured YANG data consumption** directly from IOS XE, bypassing CLI parsing overhead
 - **Secure credential management** via environment variables and `.env` files
