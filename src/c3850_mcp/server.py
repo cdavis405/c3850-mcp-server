@@ -68,6 +68,16 @@ async def server_lifespan(server: FastMCP):
 mcp = FastMCP("cisco-3850", dependencies=["httpx"], lifespan=server_lifespan)
 
 @mcp.tool()
+async def get_capabilities() -> str:
+    """Get the capabilities of this MCP server and the connected device.
+    
+    Returns:
+        A summary of supported features, tools, and device information.
+    """
+    capabilities = device.get_capabilities()
+    return str(capabilities)
+
+@mcp.tool()
 @tool_error_handler
 async def get_interfaces_status(status_filter: Optional[str] = None) -> str:
     """Get the status of all interfaces (up/down, speed, duplex, vlan).

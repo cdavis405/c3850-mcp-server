@@ -184,6 +184,25 @@ class C3850Device:
             "vlan_id": vlan_id
         }
 
+    def get_capabilities(self) -> Dict[str, Any]:
+        """Get the capabilities of the device and server."""
+        return {
+            "device_type": "Cisco 3850",
+            "features": [
+                "Interface Normalization (e.g. 'Te1/0/1' -> 'TenGigabitEthernet1/0/1')",
+                "Blast Radius Analysis (Risk assessment before critical actions)",
+                "Log Filtering (Server-side filtering of 'get_recent_logs')",
+                "Connection Pooling (Efficient HTTP connection reuse)",
+                "Interface Filtering (Filter by 'connected'/'not connected')"
+            ],
+            "tools": [
+                "Interface Management (Status, State, VLAN, Bounce)",
+                "VLAN Management (Brief, Name)",
+                "Diagnostics (Health, Transceivers, Logs, Errors)",
+                "System Information (Summary)"
+            ]
+        }
+
     async def _request(self, method: str, path: str, json: Optional[Dict] = None) -> Dict[str, Any]:
         """Make an HTTP request to the device."""
         async with self.semaphore:
