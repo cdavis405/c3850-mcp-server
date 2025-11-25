@@ -9,7 +9,7 @@ with open("/tmp/shim.log", "a") as f:
     f.write(f"CWD: {os.getcwd()}\n")
 
 # Force usage of venv python if available
-VENV_PYTHON = "/home/chisdavis/c3850-mcp-server/.venv/bin/python"
+VENV_PYTHON = "/home/chisdavis/gitprojects/c3850-mcp-server/c3850-mcp-server/.venv/bin/python"
 if sys.executable != VENV_PYTHON and os.path.exists(VENV_PYTHON):
     with open("/tmp/shim.log", "a") as f:
         f.write(f"Re-executing with {VENV_PYTHON}\n")
@@ -20,10 +20,15 @@ if sys.executable != VENV_PYTHON and os.path.exists(VENV_PYTHON):
         with open("/tmp/shim.log", "a") as f:
             f.write(f"Execv failed: {e}\n")
 
+
 import asyncio
 import logging
 import httpx
+from dotenv import load_dotenv
 from typing import Any, Dict, List, Optional
+
+# Load environment variables
+load_dotenv()
 
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
