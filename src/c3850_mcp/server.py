@@ -9,13 +9,19 @@ with open("/tmp/shim.log", "a") as f:
     f.write(f"CWD: {os.getcwd()}\n")
 
 # Force usage of venv python if available
-VENV_PYTHON = "/home/chisdavis/gitprojects/c3850-mcp-server/c3850-mcp-server/.venv/bin/python"
-if sys.executable != VENV_PYTHON and os.path.exists(VENV_PYTHON):
+from pathlib import Path
+
+# Force usage of venv python if available
+# This script is in src/c3850_mcp/server.py, so project root is 3 levels up
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python"
+
+if sys.executable != str(VENV_PYTHON) and VENV_PYTHON.exists():
     with open("/tmp/shim.log", "a") as f:
         f.write(f"Re-executing with {VENV_PYTHON}\n")
     # Re-execute with the correct interpreter
     try:
-        os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
+        os.execv(str(VENV_PYTHON), [str(VENV_PYTHON)] + sys.argv)
     except Exception as e:
         with open("/tmp/shim.log", "a") as f:
             f.write(f"Execv failed: {e}\n")
