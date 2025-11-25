@@ -56,6 +56,37 @@ class C3850Device:
         }
         self.auth = (self.config.username, self.config.password)
 
+    def normalize_interface_name(self, name: str) -> str:
+        """Helper to expand short names like 'Te1/0/1' to full IOS names."""
+        name_lower = name.lower()
+        
+        # Map of prefix to (full_name, prefix_length_to_replace)
+        # Order matters: check longer matches first if there's overlap, 
+        # but here we check full names first to avoid double replacement.
+        mappings = [
+            ("tengigabitethernet", "TenGigabitEthernet"),
+            ("gigabitethernet", "GigabitEthernet"),
+            ("fastethernet", "FastEthernet"),
+            ("fortygigabitethernet", "FortyGigabitEthernet"),
+            ("vlan", "Vlan"),
+            ("te", "TenGigabitEthernet"),
+            ("gi", "GigabitEthernet"),
+            ("fa", "FastEthernet"),
+            ("fo", "FortyGigabitEthernet"),
+            ("vl", "Vlan"),
+        ]
+
+        for prefix, full_name in mappings:
+            if name_lower.startswith(prefix):
+                # Replace the prefix with the full name
+                # We use the length of the matched prefix to slice the original string's number part
+                # But wait, we want to replace the *start* of the string.
+                # And we want to preserve the rest of the string (the numbers).
+                # Since we matched on lower, we can just replace the start.
+                return full_name + name[len(prefix):]
+        
+        return name # Return raw string if no match
+
     async def _request(self, method: str, path: str, json: Optional[Dict] = None) -> Dict[str, Any]:
         """Make an HTTP request to the device."""
         async with self.semaphore:
@@ -114,8 +145,11 @@ class C3850Device:
                 if status_filter.lower() in ["up", "down"]:
                     if oper_status != status_filter.lower():
                         continue
-                elif status_filter not in name:
-                    continue
+                else:
+                    # Normalize the filter to match full interface names
+                    normalized_filter = self.normalize_interface_name(status_filter)
+                    if normalized_filter not in name:
+                        continue
 
             config = config_map.get(name, {})
             simplified_interfaces.append({
@@ -200,6 +234,7 @@ class C3850Device:
 
     async def set_interface_state(self, interface: str, state: str) -> Dict[str, Any]:
         """Set interface state (up/down)."""
+        interface = self.normalize_interface_name(interface)
         from urllib.parse import quote
         enabled = state.lower() == "up"
         payload = {
@@ -217,6 +252,7 @@ class C3850Device:
         # Cisco-IOS-XE-native:native/interface/GigabitEthernet={name}
         # Note: Interface type needs to be handled dynamically in a real scenario.
         # Assuming GigabitEthernet for simplicity or parsing the name.
+        interface = self.normalize_interface_name(interface)
         if "GigabitEthernet" in interface:
             if_type = "GigabitEthernet"
             if_name = interface.replace("GigabitEthernet", "")
@@ -263,5 +299,11 @@ class C3850Device:
     async def bounce_interface(self, interface: str) -> Dict[str, Any]:
         """Bounce (shut/no shut) an interface."""
         # RESTCONF doesn't have a "bounce" primitive, so we do two requests.
+        # Normalization happens in set_interface_state, but good to be explicit or just let it flow down.
+        # Since we call set_interface_state, it will normalize there.
+        # But wait, we need to pass the same normalized name to both calls to be safe/consistent?
+        # Actually set_interface_state normalizes it, so we can just pass the raw string.
+        # However, to be cleaner, let's normalize once here.
+        interface = self.normalize_interface_name(interface)
         await self.set_interface_state(interface, "down")
         return await self.set_interface_state(interface, "up")
