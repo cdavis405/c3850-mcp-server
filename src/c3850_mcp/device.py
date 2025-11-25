@@ -142,8 +142,17 @@ class C3850Device:
             
             # Apply filter if present
             if status_filter:
-                if status_filter.lower() in ["up", "down"]:
-                    if oper_status != status_filter.lower():
+                f_lower = status_filter.lower()
+                if f_lower in ["up", "down"]:
+                    if oper_status != f_lower:
+                        continue
+                elif f_lower == "connected":
+                    # Connected means oper-status is up
+                    if oper_status != "up":
+                        continue
+                elif f_lower == "not connected":
+                    # Not connected means oper-status is not up (down, lower-layer-down, etc)
+                    if oper_status == "up":
                         continue
                 else:
                     # Normalize the filter to match full interface names

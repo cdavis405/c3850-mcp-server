@@ -23,8 +23,9 @@ def tool_error_handler(func):
         except httpx.HTTPStatusError as e:
             # Handle 401/403/404 specifically for the LLM
             return f"⚠️ Network Error {e.response.status_code}: {e.response.text}"
-        except httpx.ConnectTimeout:
-            return "⚠️ Error: The Cisco 3850 is unreachable (Timeout)."
+        except httpx.RequestError as e:
+            # Handle connection timeouts, refused connections, etc.
+            return f"⚠️ Device Communication Error: {str(e)}"
         except Exception as e:
             logger.error(f"Critical error in {func.__name__}: {e}")
             return f"❌ Internal Tool Error: {str(e)}"
@@ -57,7 +58,8 @@ async def get_interfaces_status(status_filter: Optional[str] = None) -> str:
     """Get the status of all interfaces (up/down, speed, duplex, vlan).
     
     Args:
-        status_filter: Optional. 'up', 'down', or specific interface name.
+        status_filter: Optional. 'up', 'down', 'connected', 'not connected', or specific interface name.
+                       Use 'connected' to ignore unused ports.
     """
     result = await device.get_interfaces_status(status_filter)
     return str(result)
