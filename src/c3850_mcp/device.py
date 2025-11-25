@@ -5,6 +5,7 @@ import jmespath
 import time
 from functools import wraps
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 from pydantic import BaseModel
 
 class DeviceConfig(BaseModel):
@@ -115,7 +116,9 @@ class C3850Device:
         if_name = match.group(2)
         
         try:
-            path = f"/Cisco-IOS-XE-native:native/interface/{if_type}={if_name}"
+            # Encode the interface name (e.g. 1/0/2 -> 1%2F0%2F2)
+            encoded_name = quote(if_name, safe='')
+            path = f"/Cisco-IOS-XE-native:native/interface/{if_type}={encoded_name}"
             data = await self._request("GET", path)
             key = f"Cisco-IOS-XE-native:{if_type}"
             return data.get(key, {})
@@ -453,12 +456,12 @@ class C3850Device:
         # Note: Interface type needs to be handled dynamically in a real scenario.
         # Assuming GigabitEthernet for simplicity or parsing the name.
         interface = self.normalize_interface_name(interface)
-        if "GigabitEthernet" in interface:
-            if_type = "GigabitEthernet"
-            if_name = interface.replace("GigabitEthernet", "")
-        elif "TenGigabitEthernet" in interface:
+        if "TenGigabitEthernet" in interface:
             if_type = "TenGigabitEthernet"
             if_name = interface.replace("TenGigabitEthernet", "")
+        elif "GigabitEthernet" in interface:
+            if_type = "GigabitEthernet"
+            if_name = interface.replace("GigabitEthernet", "")
         else:
             raise ValueError("Unsupported interface type")
 
@@ -466,18 +469,19 @@ class C3850Device:
             f"Cisco-IOS-XE-native:{if_type}": {
                 "name": if_name,
                 "switchport": {
-                    "access": {
+                    "Cisco-IOS-XE-switch:access": {
                         "vlan": {
                             "vlan": vlan_id
                         }
                     },
-                    "mode": {
+                    "Cisco-IOS-XE-switch:mode": {
                         "access": {}
                     }
                 }
             }
         }
-        return await self._request("PATCH", f"/Cisco-IOS-XE-native:native/interface/{if_type}={if_name}", json=payload)
+        encoded_name = quote(if_name, safe='')
+        return await self._request("PATCH", f"/Cisco-IOS-XE-native:native/interface/{if_type}={encoded_name}", json=payload)
 
     async def set_vlan_name(self, vlan_id: int, name: str) -> Dict[str, Any]:
         """Set name for a VLAN."""

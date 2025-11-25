@@ -1,3 +1,25 @@
+#!/usr/bin/env python3
+import sys
+import os
+
+# Shim logging
+with open("/tmp/shim.log", "a") as f:
+    f.write(f"Starting with {sys.executable}\n")
+    f.write(f"Args: {sys.argv}\n")
+    f.write(f"CWD: {os.getcwd()}\n")
+
+# Force usage of venv python if available
+VENV_PYTHON = "/home/chisdavis/c3850-mcp-server/.venv/bin/python"
+if sys.executable != VENV_PYTHON and os.path.exists(VENV_PYTHON):
+    with open("/tmp/shim.log", "a") as f:
+        f.write(f"Re-executing with {VENV_PYTHON}\n")
+    # Re-execute with the correct interpreter
+    try:
+        os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
+    except Exception as e:
+        with open("/tmp/shim.log", "a") as f:
+            f.write(f"Execv failed: {e}\n")
+
 import asyncio
 import logging
 import httpx
@@ -9,7 +31,12 @@ from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
 from c3850_mcp.device import C3850Device
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename="/tmp/mcp_server_prod.log",
+    filemode="a",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger("c3850-mcp-server")
 
 from contextlib import asynccontextmanager
