@@ -239,6 +239,42 @@ class C3850Device:
 
     async def get_interfaces_status(self, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get status of all interfaces."""
+        
+        # Optimization: If status_filter is a specific interface, fetch only that one.
+        if status_filter and status_filter.lower() not in ["up", "down", "connected", "not connected"]:
+            normalized_filter = self.normalize_interface_name(status_filter)
+            # Check if it looks like a full interface name (starts with known type)
+            # normalize_interface_name expands prefixes, so if it starts with a known type, it's likely a full name.
+            # We can try to fetch it directly.
+            
+            # Simple check: does it start with an uppercase letter? normalize_interface_name returns TitleCase.
+            # And does it contain numbers?
+            if any(normalized_filter.startswith(x) for x in ["TenGigabitEthernet", "GigabitEthernet", "FastEthernet", "Vlan", "Loopback", "Port-channel"]):
+                 from urllib.parse import quote
+                 encoded_name = quote(normalized_filter, safe='')
+                 
+                 try:
+                     # Fetch state
+                     state_data = await self._request("GET", f"/ietf-interfaces:interfaces-state/interface={encoded_name}")
+                     iface_state = state_data.get("ietf-interfaces:interface", {})
+                     
+                     # Fetch config
+                     config_data = await self._request("GET", f"/ietf-interfaces:interfaces/interface={encoded_name}")
+                     iface_config = config_data.get("ietf-interfaces:interface", {})
+                     
+                     if iface_state:
+                         return [{
+                            "name": iface_state.get("name"),
+                            "description": iface_config.get("description", ""),
+                            "admin_status": iface_state.get("admin-status"),
+                            "oper_status": iface_state.get("oper-status"),
+                            "speed": iface_state.get("speed"),
+                            "mac": iface_state.get("phys-address")
+                         }]
+                 except Exception:
+                     # If specific fetch fails (e.g. 404), fall back to full fetch
+                     pass
+
         # ietf-interfaces:interfaces-state
         data = await self._request("GET", "/ietf-interfaces:interfaces-state")
         

@@ -14,23 +14,26 @@ async def main():
     print("Initializing device...")
     device = C3850Device()
     
-    print("Getting interface status for '1/0/1'...")
+    target_interface = "Te1/0/2"
+    print(f"Getting interface status for '{target_interface}'...")
+    
+    import time
+    start_time = time.time()
+    
     try:
-        # Try to filter for 1/0/1
-        status = await device.get_interfaces_status(status_filter="1/0/1")
-        print(f"Found {len(status)} interfaces matching '1/0/1'")
+        # Try to filter for specific interface
+        status = await device.get_interfaces_status(status_filter=target_interface)
+        end_time = time.time()
+        
+        print(f"Time taken: {end_time - start_time:.4f} seconds")
+        print(f"Found {len(status)} interfaces matching '{target_interface}'")
+        
         for interface in status:
             print(f"Interface: {interface['name']}")
             print(f"  Admin Status: {interface['admin_status']}")
             print(f"  Oper Status: {interface['oper_status']}")
             print(f"  Description: {interface['description']}")
             
-        if not status:
-            print("No interface found matching '1/0/1'. Listing first 10 interfaces to check naming convention...")
-            all_status = await device.get_interfaces_status()
-            for interface in all_status[:10]:
-                 print(f"  {interface['name']}: {interface['oper_status']}")
-                 
     except Exception as e:
         print(f"Error: {e}")
 
