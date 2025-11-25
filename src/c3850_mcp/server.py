@@ -100,7 +100,7 @@ async def get_recent_logs(count: int = 50) -> str:
     Args:
         count: Number of log lines to retrieve (default 50).
     """
-    result = await device.get_recent_logs()
+    result = await device.get_recent_logs(count)
     return str(result)
 
 @mcp.tool()

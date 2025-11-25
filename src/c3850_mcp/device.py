@@ -1,9 +1,6 @@
 import os
 import asyncio
 import httpx
-import os
-import asyncio
-import httpx
 import jmespath
 import time
 from functools import wraps
@@ -124,7 +121,6 @@ class C3850Device:
             simplified_interfaces.append({
                 "name": name,
                 "description": config.get("description", ""),
-                "debug": "test_reload",
                 "admin_status": iface.get("admin-status"),
                 "oper_status": oper_status,
                 "speed": iface.get("speed"),
@@ -184,12 +180,18 @@ class C3850Device:
             "environment_summary": "Check details" # Simplifying for now
         }
 
-    async def get_recent_logs(self) -> Dict[str, Any]:
-        """Get recent log messages."""
+    async def get_recent_logs(self, count: int = 50) -> Dict[str, Any]:
+        """Get recent log messages.
+        
+        Args:
+            count: Number of log lines to retrieve (default 50).
+        """
         # Cisco-IOS-XE-checkpoint-archive-oper:checkpoint-archives
         # Note: Syslog via RESTCONF is not always straightforward. 
         # We might need to rely on a specific operational model if available.
         # Fallback to native logging config if operational data isn't exposed.
+        # The count parameter is accepted but not used in this RESTCONF query
+        # as the YANG model doesn't support limiting results.
         return await self._request("GET", "/Cisco-IOS-XE-native:native/logging")
 
     async def check_interface_errors(self) -> Dict[str, Any]:
