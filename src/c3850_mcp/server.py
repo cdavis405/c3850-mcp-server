@@ -29,7 +29,22 @@ def tool_error_handler(func):
         except Exception as e:
             logger.error(f"Critical error in {func.__name__}: {e}")
             return f"❌ Internal Tool Error: {str(e)}"
+            return f"❌ Internal Tool Error: {str(e)}"
     return wrapper
+
+def format_blast_radius_report(impact: Dict[str, Any]) -> str:
+    """Format the blast radius analysis report."""
+    if impact['risk_level'] == "ZERO":
+        return f"ℹ️ ANALYSIS: {impact.get('interface', 'Target')} is already in a safe state (e.g., down). No impact. Call with confirm=True to proceed."
+    
+    warnings = "\n".join([f"- {w}" for w in impact['warnings']])
+    return (
+        f"⛔ STOP! BLAST RADIUS ANALYSIS for {impact.get('interface', 'Target')}:\n"
+        f"Risk Level: {impact['risk_level']}\n"
+        f"Warnings:\n{warnings}\n\n"
+        f"ACTION REQUIRED: Explain these risks to the user. "
+        f"Do not proceed until the user explicitly approves 'confirm=True'."
+    )
 
 # Global client storage
 http_client = None
@@ -115,48 +130,75 @@ async def check_interface_errors() -> str:
 
 @mcp.tool()
 @tool_error_handler
-async def set_interface_state(interface: str, state: str) -> str:
+async def set_interface_state(interface: str, state: str, confirm: bool = False) -> str:
     """Set an interface state to 'up' or 'down'.
     
     Args:
         interface: Interface name (e.g., GigabitEthernet1/0/1).
         state: Desired state ('up' or 'down').
+        confirm: Set to True to execute the change after reviewing the blast radius.
     """
+    interface = device.normalize_interface_name(interface)
+    impact = await device.analyze_interface_impact(interface)
+    
+    if not confirm:
+        return format_blast_radius_report(impact)
+
     result = await device.set_interface_state(interface, state)
     return str(result)
 
 @mcp.tool()
 @tool_error_handler
-async def set_interface_vlan(interface: str, vlan_id: int) -> str:
+async def set_interface_vlan(interface: str, vlan_id: int, confirm: bool = False) -> str:
     """Assign an interface to a specific VLAN (access mode).
     
     Args:
         interface: Interface name.
         vlan_id: VLAN ID.
+        confirm: Set to True to execute.
     """
+    interface = device.normalize_interface_name(interface)
+    impact = await device.analyze_interface_impact(interface)
+    
+    if not confirm:
+        return format_blast_radius_report(impact)
+
     result = await device.set_interface_vlan(interface, vlan_id)
     return str(result)
 
 @mcp.tool()
 @tool_error_handler
-async def set_vlan_name(vlan_id: int, name: str) -> str:
+async def set_vlan_name(vlan_id: int, name: str, confirm: bool = False) -> str:
     """Set the name of a VLAN.
     
     Args:
         vlan_id: VLAN ID.
         name: New name for the VLAN.
+        confirm: Set to True to execute.
     """
+    impact = await device.analyze_vlan_impact(vlan_id)
+    
+    if not confirm:
+        return format_blast_radius_report(impact)
+
     result = await device.set_vlan_name(vlan_id, name)
     return str(result)
 
 @mcp.tool()
 @tool_error_handler
-async def bounce_interface(interface: str) -> str:
+async def bounce_interface(interface: str, confirm: bool = False) -> str:
     """Bounce (shutdown then no shutdown) an interface.
     
     Args:
         interface: Interface name.
+        confirm: Set to True to execute.
     """
+    interface = device.normalize_interface_name(interface)
+    impact = await device.analyze_interface_impact(interface)
+    
+    if not confirm:
+        return format_blast_radius_report(impact)
+
     result = await device.bounce_interface(interface)
     return str(result)
 

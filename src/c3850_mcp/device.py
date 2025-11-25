@@ -87,6 +87,103 @@ class C3850Device:
         
         return name # Return raw string if no match
 
+    async def get_cdp_neighbors(self, interface: str) -> List[Dict[str, Any]]:
+        """Get CDP neighbors for an interface."""
+        # Cisco-IOS-XE-cdp-oper:cdp-neighbor-details
+        data = await self._request("GET", "/Cisco-IOS-XE-cdp-oper:cdp-neighbor-details")
+        # Filter for the specific interface
+        neighbors = jmespath.search('"Cisco-IOS-XE-cdp-oper:cdp-neighbor-details"."cdp-neighbor-detail"[]', data) or []
+        
+        # Filter by local interface name
+        interface_lower = interface.lower()
+        matched = []
+        for n in neighbors:
+            local_intf = n.get("local-intf-name", "").lower()
+            # Try exact match or normalized match
+            if local_intf == interface_lower or self.normalize_interface_name(local_intf).lower() == interface_lower:
+                matched.append(n)
+        return matched
+
+    async def get_interface_details(self, interface: str) -> Dict[str, Any]:
+        """Get detailed configuration for an interface."""
+        import re
+        match = re.match(r"([A-Za-z]+)([\d/.]+)", interface)
+        if not match:
+            return {}
+        
+        if_type = match.group(1)
+        if_name = match.group(2)
+        
+        try:
+            path = f"/Cisco-IOS-XE-native:native/interface/{if_type}={if_name}"
+            data = await self._request("GET", path)
+            key = f"Cisco-IOS-XE-native:{if_type}"
+            return data.get(key, {})
+        except Exception:
+            return {}
+
+    async def analyze_interface_impact(self, interface: str) -> Dict[str, Any]:
+        """Returns a risk assessment for an interface."""
+        full_name = self.normalize_interface_name(interface)
+        
+        # Get details
+        config = await self.get_interface_details(full_name)
+        status_list = await self.get_interfaces_status(status_filter=full_name)
+        status = status_list[0] if status_list else {}
+        cdp_data = await self.get_cdp_neighbors(full_name)
+        
+        risk_level = "LOW"
+        warnings = []
+        
+        # Check 1: Is it a Trunk?
+        switchport = config.get("switchport", {})
+        if isinstance(switchport, dict):
+             mode = switchport.get("mode", {})
+             if "trunk" in mode:
+                 risk_level = "CRITICAL"
+                 warnings.append("⚠️ Interface is a TRUNK port carrying multiple VLANs.")
+        
+        # Check 2: Description Keywords
+        desc = config.get("description", "").lower()
+        if any(x in desc for x in ['wap', 'access point', 'uplink', 'core', 'server', 'router']):
+            if risk_level != "CRITICAL":
+                risk_level = "HIGH"
+            warnings.append(f"⚠️ Description contains high-value keyword: '{config.get('description')}'")
+            
+        # Check 3: Active Neighbors
+        if cdp_data:
+            risk_level = "CRITICAL"
+            devices = [n.get("device-id") for n in cdp_data]
+            warnings.append(f"⚠️ Active CDP Neighbor(s) detected: {', '.join(devices)}")
+            
+        # Check 4: Is it already down?
+        # If we are analyzing impact of a change, knowing it's down is useful.
+        # If it's admin down, changing it (unless bringing it up) has low impact.
+        if status.get("admin_status") == "down":
+             risk_level = "ZERO"
+             warnings.append("Interface is already administratively down.")
+        
+        return {
+            "risk_level": risk_level,
+            "warnings": warnings,
+            "interface": full_name
+        }
+
+    async def analyze_vlan_impact(self, vlan_id: int) -> Dict[str, Any]:
+        """Returns a risk assessment for a VLAN."""
+        risk_level = "LOW"
+        warnings = []
+        
+        if vlan_id == 1:
+            risk_level = "CRITICAL"
+            warnings.append("⚠️ VLAN 1 is the default VLAN and often carries management traffic.")
+            
+        return {
+            "risk_level": risk_level,
+            "warnings": warnings,
+            "vlan_id": vlan_id
+        }
+
     async def _request(self, method: str, path: str, json: Optional[Dict] = None) -> Dict[str, Any]:
         """Make an HTTP request to the device."""
         async with self.semaphore:
