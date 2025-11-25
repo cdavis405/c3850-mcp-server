@@ -94,13 +94,14 @@ async def get_device_health() -> str:
 
 @mcp.tool()
 @tool_error_handler
-async def get_recent_logs(count: int = 50) -> str:
+async def get_recent_logs(count: int = 50, search_term: Optional[str] = None) -> str:
     """Get the most recent log messages.
     
     Args:
         count: Number of log lines to retrieve (default 50).
+        search_term: Optional. Filter logs by this term (case-insensitive).
     """
-    result = await device.get_recent_logs(count)
+    result = await device.get_recent_logs(count, search_term)
     return str(result)
 
 @mcp.tool()
