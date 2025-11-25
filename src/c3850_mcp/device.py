@@ -105,6 +105,20 @@ class C3850Device:
                 matched.append(n)
         return matched
 
+    async def get_lldp_neighbors(self, interface: str) -> List[Dict[str, Any]]:
+        """Get LLDP neighbors for an interface."""
+        # Cisco-IOS-XE-lldp-oper:lldp-entries
+        data = await self._request("GET", "/Cisco-IOS-XE-lldp-oper:lldp-entries")
+        neighbors = jmespath.search('"Cisco-IOS-XE-lldp-oper:lldp-entries"."lldp-entry"[]', data) or []
+        
+        interface_lower = interface.lower()
+        matched = []
+        for n in neighbors:
+            local_intf = n.get("local-interface", "").lower()
+            if local_intf == interface_lower or self.normalize_interface_name(local_intf).lower() == interface_lower:
+                matched.append(n)
+        return matched
+
     async def get_interface_details(self, interface: str) -> Dict[str, Any]:
         """Get detailed configuration for an interface."""
         import re
@@ -134,6 +148,7 @@ class C3850Device:
         status_list = await self.get_interfaces_status(status_filter=full_name)
         status = status_list[0] if status_list else {}
         cdp_data = await self.get_cdp_neighbors(full_name)
+        lldp_data = await self.get_lldp_neighbors(full_name)
         
         risk_level = "LOW"
         warnings = []
@@ -153,11 +168,16 @@ class C3850Device:
                 risk_level = "HIGH"
             warnings.append(f"⚠️ Description contains high-value keyword: '{config.get('description')}'")
             
-        # Check 3: Active Neighbors
+        # Check 3: Active Neighbors (CDP & LLDP)
         if cdp_data:
             risk_level = "CRITICAL"
             devices = [n.get("device-id") for n in cdp_data]
             warnings.append(f"⚠️ Active CDP Neighbor(s) detected: {', '.join(devices)}")
+            
+        if lldp_data:
+            risk_level = "CRITICAL"
+            devices = [n.get("device-id") for n in lldp_data]
+            warnings.append(f"⚠️ Active LLDP Neighbor(s) detected: {', '.join(devices)}")
             
         # Check 4: Is it already down?
         # If we are analyzing impact of a change, knowing it's down is useful.
