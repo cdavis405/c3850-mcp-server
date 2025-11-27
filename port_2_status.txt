@@ -1,0 +1,53 @@
+Initializing device...
+Getting interface status for filter '2'...
+Found 10 interfaces matching '2'
+Interface: TenGigabitEthernet1/0/2
+  Admin Status: down
+  Oper Status: lower-layer-down
+  Description: East Bedroom
+--------------------
+Interface: TenGigabitEthernet1/0/12
+  Admin Status: up
+  Oper Status: up
+  Description: West WAP
+--------------------
+Interface: TenGigabitEthernet1/0/20
+  Admin Status: down
+  Oper Status: down
+  Description: NOT USED
+--------------------
+Interface: TenGigabitEthernet1/0/21
+  Admin Status: up
+  Oper Status: up
+  Description: Garage Camera
+--------------------
+Interface: TenGigabitEthernet1/0/22
+  Admin Status: down
+  Oper Status: down
+  Description: NOT USED
+--------------------
+Interface: TenGigabitEthernet1/0/23
+  Admin Status: up
+  Oper Status: up
+  Description: Reolink NVR
+--------------------
+Interface: TenGigabitEthernet1/0/24
+  Admin Status: down
+  Oper Status: down
+  Description: NOT USED
+--------------------
+Interface: GigabitEthernet1/1/2
+  Admin Status: down
+  Oper Status: down
+  Description: NOT USED
+--------------------
+Interface: TenGigabitEthernet1/1/2
+  Admin Status: down
+  Oper Status: down
+  Description: NOT USED
+--------------------
+Interface: FortyGigabitEthernet1/1/2
+  Admin Status: down
+  Oper Status: down
+  Description: NOT USED
+--------------------

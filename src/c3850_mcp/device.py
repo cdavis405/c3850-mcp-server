@@ -283,10 +283,15 @@ class C3850Device:
                      iface_config = config_data.get("ietf-interfaces:interface", {})
                      
                      if iface_state:
+                         # Derive admin_status from config 'enabled' if available
+                         admin_status = iface_state.get("admin-status")
+                         if "enabled" in iface_config:
+                             admin_status = "up" if iface_config["enabled"] else "down"
+
                          return [{
                             "name": iface_state.get("name"),
                             "description": iface_config.get("description", ""),
-                            "admin_status": iface_state.get("admin-status"),
+                            "admin_status": admin_status,
                             "oper_status": iface_state.get("oper-status"),
                             "speed": iface_state.get("speed"),
                             "mac": iface_state.get("phys-address")
@@ -336,10 +341,17 @@ class C3850Device:
                         continue
 
             config = config_map.get(name, {})
+            
+            # Derive admin_status from config 'enabled' if available, otherwise fallback to state
+            # This handles cases where state might be out of sync or misleading
+            admin_status = iface.get("admin-status")
+            if "enabled" in config:
+                admin_status = "up" if config["enabled"] else "down"
+            
             simplified_interfaces.append({
                 "name": name,
                 "description": config.get("description", ""),
-                "admin_status": iface.get("admin-status"),
+                "admin_status": admin_status,
                 "oper_status": oper_status,
                 "speed": iface.get("speed"),
                 "mac": iface.get("phys-address")
@@ -495,6 +507,65 @@ class C3850Device:
         """Set interface state (up/down)."""
         interface = self.normalize_interface_name(interface)
         from urllib.parse import quote
+        
+        # Determine type and name for native model
+        if_type = None
+        if_name = None
+        
+        if "TenGigabitEthernet" in interface:
+            if_type = "TenGigabitEthernet"
+            if_name = interface.replace("TenGigabitEthernet", "")
+        elif "GigabitEthernet" in interface:
+            if_type = "GigabitEthernet"
+            if_name = interface.replace("GigabitEthernet", "")
+        elif "FastEthernet" in interface:
+            if_type = "FastEthernet"
+            if_name = interface.replace("FastEthernet", "")
+        elif "FortyGigabitEthernet" in interface:
+            if_type = "FortyGigabitEthernet"
+            if_name = interface.replace("FortyGigabitEthernet", "")
+        elif "Vlan" in interface:
+            if_type = "Vlan"
+            if_name = interface.replace("Vlan", "")
+            
+        if if_type and if_name:
+            encoded_name = quote(if_name, safe='')
+            
+            # Prepare IETF payload as well
+            ietf_enabled = state.lower() == "up"
+            ietf_payload = {
+                "ietf-interfaces:interface": {
+                    "name": interface,
+                    "enabled": ietf_enabled
+                }
+            }
+            encoded_interface = quote(interface, safe='')
+            
+            if state.lower() == "up":
+                # To bring up:
+                # 1. DELETE native shutdown
+                try:
+                    await self._request("DELETE", f"/Cisco-IOS-XE-native:native/interface/{if_type}={encoded_name}/shutdown")
+                except Exception:
+                    pass
+                
+                # 2. PATCH IETF enabled=true
+                return await self._request("PATCH", f"/ietf-interfaces:interfaces/interface={encoded_interface}", json=ietf_payload)
+            else:
+                # To shut down:
+                # 1. PATCH native shutdown
+                native_payload = {
+                    f"Cisco-IOS-XE-native:{if_type}": {
+                        "name": if_name,
+                        "shutdown": [None]
+                    }
+                }
+                await self._request("PATCH", f"/Cisco-IOS-XE-native:native/interface/{if_type}={encoded_name}", json=native_payload)
+                
+                # 2. PATCH IETF enabled=false
+                return await self._request("PATCH", f"/ietf-interfaces:interfaces/interface={encoded_interface}", json=ietf_payload)
+        
+        # Fallback to ietf-interfaces if unknown type
         enabled = state.lower() == "up"
         payload = {
             "ietf-interfaces:interface": {
@@ -502,7 +573,6 @@ class C3850Device:
                 "enabled": enabled
             }
         }
-        # Using PATCH to merge config
         encoded_interface = quote(interface, safe='')
         return await self._request("PATCH", f"/ietf-interfaces:interfaces/interface={encoded_interface}", json=payload)
 
